@@ -1,0 +1,112 @@
+# Builds the Linux AppImage and the Windows zip on every push / PR.
+# Pushing a tag like v0.1.0 also creates a GitHub release with both attached.
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+env:
+  QT_VERSION: '6.8.*'
+
+jobs:
+  linux:
+    # oldest supported Ubuntu: the AppImage runs on distros with this glibc or newer
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake libzip-dev libgl1-mesa-dev \
+            libxkbcommon-dev libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+            libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 \
+            libxcb-xkb1 libegl1 libfontconfig1 libdbus-1-3 libgtk-3-0 \
+            libwayland-client0 libwayland-cursor0 libwayland-egl1 file
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          modules: qtimageformats
+          cache: true
+
+      - name: Build and test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j"$(nproc)"
+          ctest --test-dir build --output-on-failure
+
+      - name: AppImage
+        run: ./packaging/build-appimage.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: Trim_Sheet_Builder-x86_64.AppImage
+
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: win64_msvc2022_64
+          modules: qtimageformats
+          cache: true
+
+      - name: libzip
+        run: vcpkg install libzip:x64-windows
+
+      - name: Build and test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          cmake --build build --config Release
+          ctest --test-dir build -C Release --output-on-failure
+
+      - name: Package
+        run: |
+          $dist = "dist/Trim Sheet Builder"
+          cmake --install build --config Release --prefix $dist
+          # libzip and its dependencies (copied next to the exe by vcpkg)
+          Copy-Item build/Release/*.dll $dist
+          windeployqt --release --no-translations --no-system-d3d-compiler --no-opengl-sw `
+            "$dist/trimsheet.exe"
+          # MSVC runtime, so users don't need the VC++ redistributable
+          foreach ($f in 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') {
+            Copy-Item "$env:SystemRoot/System32/$f" $dist
+          }
+          Copy-Item LICENSE $dist
+          Compress-Archive -Path $dist -DestinationPath Trim_Sheet_Builder-windows-x64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: Trim_Sheet_Builder-windows-x64.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            Trim_Sheet_Builder-x86_64.AppImage
+            Trim_Sheet_Builder-windows-x64.zip
+          generate_release_notes: true

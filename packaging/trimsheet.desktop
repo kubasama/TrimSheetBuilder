@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Trim Sheet Builder
+GenericName=Trim Sheet Builder
+Comment=Lay out and fill texture trim sheets
+Exec=trimsheet %f
+Icon=trimsheet
+Terminal=false
+Categories=Graphics;2DGraphics;
+MimeType=application/x-trimsheet;

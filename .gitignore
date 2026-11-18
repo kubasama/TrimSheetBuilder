@@ -1,0 +1,7 @@
+build*/
+tools/
+*.AppImage
+*.trimsheet.part
+compile_commands.json
+.cache/
+*.user
