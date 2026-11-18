@@ -128,6 +128,16 @@ QJsonObject projectToJson(const Project &p, const QDir &baseDir, const QSet<QStr
 }
 
 // ---------------------------------------------------------------- zip helpers
+// libzip on Windows takes UTF-8 file names; elsewhere the local encoding.
+static QByteArray zipPath(const QString &path)
+{
+#ifdef Q_OS_WIN
+    return path.toUtf8();
+#else
+    return QFile::encodeName(path);
+#endif
+}
+
 struct ZipReader {
     zip_t *za = nullptr;
     ~ZipReader() { if (za) zip_discard(za); }
@@ -172,7 +182,7 @@ bool Serializer::save(const Project &p, const QString &path, QString *error)
     QFile::remove(tmpPath);
 
     int zerr = 0;
-    zip_t *za = zip_open(QFile::encodeName(tmpPath).constData(), ZIP_CREATE | ZIP_TRUNCATE, &zerr);
+    zip_t *za = zip_open(zipPath(tmpPath).constData(), ZIP_CREATE | ZIP_TRUNCATE, &zerr);
     if (!za) {
         zip_error_t ze;
         zip_error_init_with_code(&ze, zerr);
@@ -241,7 +251,7 @@ Project *Serializer::load(const QString &path, QString *error, QObject *parent)
 {
     ZipReader zr;
     int zerr = 0;
-    zr.za = zip_open(QFile::encodeName(path).constData(), ZIP_RDONLY, &zerr);
+    zr.za = zip_open(zipPath(path).constData(), ZIP_RDONLY, &zerr);
     if (!zr.za) {
         if (error)
             *error = QObject::tr("Not a trim sheet file (cannot open archive).");

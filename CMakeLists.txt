@@ -87,5 +87,9 @@ if(TRIMSHEET_BUILD_TESTS)
     enable_testing()
     add_executable(test_core tests/test_core.cpp src/gui/Snapper.cpp)
     target_link_libraries(test_core PRIVATE trimsheet_core Qt6::Test)
-    add_test(NAME test_core COMMAND test_core)
+    # "-o -,txt": results to stdout. QT_FORCE_STDERR_LOGGING: on Windows Qt
+    # otherwise sends warnings to the debugger when there's no console (CI).
+    add_test(NAME test_core COMMAND test_core -o -,txt)
+    set_tests_properties(test_core PROPERTIES
+        ENVIRONMENT "QT_FORCE_STDERR_LOGGING=1;QT_QPA_PLATFORM=offscreen")
 endif()
