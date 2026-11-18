@@ -10,6 +10,9 @@
 #include "gui/Snapper.h"
 
 #include <QFile>
+
+#include <filesystem>
+#include <system_error>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -189,7 +192,9 @@ private slots:
             QTest::qWait(1100); // mtime resolution on some filesystems
             const QString tmp = dir.filePath("tex.png.tmp");
             QVERIFY(solid(c).save(tmp, "PNG"));
-            QVERIFY(::rename(QFile::encodeName(tmp).constData(), QFile::encodeName(path).constData()) == 0);
+            std::error_code err; // replaces the target on Windows too (unlike ::rename)
+            std::filesystem::rename(tmp.toStdWString(), path.toStdWString(), err);
+            QVERIFY2(!err, err.message().c_str());
             QTRY_COMPARE_WITH_TIMEOUT(QColor(p->texture(id)->image.pixel(0, 0)), c, 3000);
         }
         delete p;
